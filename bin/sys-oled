@@ -76,10 +76,16 @@ def bytes2human(n):
 
 def cpu_usage():
     load = psutil.cpu_percent(interval=None)
-    temp = psutil.sensors_temperatures()['cpu_thermal']
+    temperatures = psutil.sensors_temperatures()
+    if 'cpu_thermal' in temperatures:
+      temp = str(temperatures['cpu_thermal'][0].current)
+    elif 'soc_thermal' in temperatures:
+      temp = str(temperatures['soc_thermal'][0].current)
+    else:
+      temp = "??."
     uptime = datetime.now().replace(second=0, microsecond=0) - datetime.fromtimestamp(psutil.boot_time())
     return "ld: %s%% T: %sC up: %s" \
-           % (str(load).split('.')[0], str(temp[0].current).split('.')[0], str(uptime).split(',')[0][:-3])
+           % (str(load).split('.')[0], temp.split('.')[0], str(uptime).split(',')[0][:-3])
 
 
 def mem_usage():
