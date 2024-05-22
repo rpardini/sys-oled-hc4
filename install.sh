@@ -14,7 +14,7 @@ fi
 echo "Installing Dependencies"
 apt-get update
 
-if [[ "$(lsb_release -cs)" == "jammy" || "$(lsb_release -cs)" == "kinetic"  || "$(lsb_release -cs)" == "lunar"  || "$(lsb_release -cs)" == "bookworm"  || "$(lsb_release -cs)" == "trixie" || "$(lsb_release -cs)" == "sid" ]]; then
+if [[  "$(lsb_release -cs)" == "noble" || "$(lsb_release -cs)" == "jammy" || "$(lsb_release -cs)" == "kinetic"  || "$(lsb_release -cs)" == "lunar"  || "$(lsb_release -cs)" == "bookworm"  || "$(lsb_release -cs)" == "trixie" || "$(lsb_release -cs)" == "sid" ]]; then
 	echo "$(lsb_release -cs); use Ubuntu-packaged Python deps."
 	apt-get install -y ${RUNTIME_DEPS}
 else
