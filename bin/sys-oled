@@ -15,6 +15,7 @@ from luma.core.render import canvas
 contrast = 255
 refresh = 10
 show_logo = 'yes'
+show_logo_seconds = (refresh / 2)     # how long to show the logo
 net_name = 'eth0'
 s1_name = 'sd'
 s1_path = '/'
@@ -27,6 +28,7 @@ if os.path.isfile(config_file):
     contrast = int(config.get('main', 'contrast'))
     refresh = float(config.get('main', 'refresh'))
     show_logo = config.get('main', 'show_logo')
+    show_logo_seconds = float(config.get('main', 'show_logo_seconds'))
     net_name = config.get('device', 'network_name')
     s1_name = config.get('device', 'storage1_name')
     s1_path = config.get('device', 'storage1_path')
@@ -120,7 +122,7 @@ def display_info(device):
 
 def logo(device, msg):
     img_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                            '../share/sys-oled', 'armbian-oled.png'))
+                                            '../share/sys-oled', 'blank.png'))
     logo = Image.open(img_path).convert("RGBA")
 
     with canvas(device) as draw:
@@ -141,7 +143,7 @@ def main():
         time.sleep(refresh)
         if show_logo == "yes":
             logo(device, host_time())
-            time.sleep(refresh / 2)
+            time.sleep(show_logo_seconds)
 
 
 if __name__ == "__main__":
