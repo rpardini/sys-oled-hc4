@@ -10,6 +10,7 @@ from PIL import Image, ImageFont
 from datetime import datetime
 from luma.core import cmdline, error
 from luma.core.render import canvas
+import glob
 
 # Load presets
 contrast = 255
@@ -19,6 +20,13 @@ net_name = 'eth0'
 s1_name = 'sd'
 s1_path = '/'
 
+# emergency signal thresholds
+max_cpu_temp = 90.0
+low_fan_rpm = -99 # disabled
+show_cpu_temp = 'yes'
+show_cpu_load = 'yes'
+show_fan_rpm = 'yes'
+
 # Load config file
 config_file = '/etc/sys-oled.conf'
 if os.path.isfile(config_file):
@@ -27,6 +35,11 @@ if os.path.isfile(config_file):
     contrast = int(config.get('main', 'contrast'))
     refresh = float(config.get('main', 'refresh'))
     show_logo = config.get('main', 'show_logo')
+    show_cpu_temp = config.get('main', 'show_cpu_temp') if config.has_option('device', 'show_cpu_temp') else show_cpu_temp
+    show_cpu_load = config.get('main', 'show_cpu_load') if config.has_option('device', 'show_cpu_load') else show_cpu_load
+    show_fan_rpm = config.get('main', 'show_fan_rpm') if config.has_option('device', 'show_fan_rpm') else show_fan_rpm
+    max_cpu_temp = float(config.get('device', 'max_cpu_temp')) if config.has_option('device','max_cpu_temp') else max_cpu_temp
+    low_fan_rpm = float(config.get('device', 'low_fan_rpm')) if config.has_option('device','low_fan_rpm') else low_fan_rpm
     net_name = config.get('device', 'network_name')
     s1_name = config.get('device', 'storage1_name')
     s1_path = config.get('device', 'storage1_path')
@@ -37,9 +50,12 @@ if os.path.isfile(config_file):
 # Load font
 font_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                          '../share/sys-oled', 'C&C Red Alert [INET].ttf'))
-font = ImageFont.truetype(font_path, 12)
-font_big = ImageFont.truetype(font_path, 18)
-
+font_size = 12
+font = ImageFont.truetype(font_path, font_size)
+font_mid_size = 18
+font_mid = ImageFont.truetype(font_path, font_mid_size)
+font_big_size = 48
+font_big = ImageFont.truetype(font_path, font_big_size)
 
 def get_device(actual_args=None):
     if actual_args is None:
@@ -58,7 +74,6 @@ def get_device(actual_args=None):
 
     return device
 
-
 def bytes2human(n):
     symbols = ('K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
     prefix = {}
@@ -73,7 +88,15 @@ def bytes2human(n):
                 return '%.1f%s' % (value, s)
     return "%sB" % n
 
-
+def get_fan_speeds():
+    fan_files = glob.glob('/sys/class/hwmon/hwmon*/fan*_input')
+    speeds = {}
+    for fan_file in fan_files:
+        with open(fan_file, 'r') as f:
+            fan_speed = f.read().strip()
+            speeds[fan_file] = f"{fan_speed}"
+    return speeds
+    
 def cpu_usage():
     load = psutil.cpu_percent(interval=None)
     temp = psutil.sensors_temperatures()['cpu_thermal']
@@ -81,18 +104,55 @@ def cpu_usage():
     return "ld: %s%% T: %sC up: %s" \
            % (str(load).split('.')[0], str(temp[0].current).split('.')[0], str(uptime).split(',')[0][:-3])
 
+def cpu_load():
+    load = psutil.cpu_percent(interval=None)
+    load = (str(load).split('.')[0])
+    return "%s%%" % (str(load).split('.')[0]), float(load)
+
+def cpu_temp():
+    temp = psutil.sensors_temperatures()['cpu_thermal']
+    temp = float(str(temp[0].current).split('.')[0])
+    return "%.1f\u00B0" % temp, temp
+
+def fan_speed():
+    fan_speeds = get_fan_speeds()
+    first = next(iter(fan_speeds))
+    first = fan_speeds[first]
+    return first, int(first)
 
 def mem_usage():
     usage = psutil.virtual_memory()
     return "mem: %s / %s - %.0f%%" \
            % (bytes2human(usage.used), bytes2human(usage.total), usage.percent)
 
-
 def disk_usage(name, dir):
     usage = psutil.disk_usage(dir)
     return name + ": %s / %s - %.0f%%" \
            % (bytes2human(usage.used), bytes2human(usage.total), usage.percent)
 
+def emergency_check(device, draw_fn, interval=0.5):
+    """
+    Flashes an emergency signal on the LCD by alternating between the callable-drawn
+    content and a blank screen, until the callable returns False.
+    
+    Args:
+        device: The luma.core device object representing the LCD.
+        draw_fn: Any callable that takes the device as an argument and returns a boolean.
+                 - True: Continue flashing.
+                 - False: Stop flashing.
+        interval: The time interval in seconds between flashing (default: 0.5 seconds).
+    """
+    while True:
+        cont = draw_fn(device)
+        if not cont:
+            break  # Stop if the callable returns False
+        
+        time.sleep(interval)
+        
+        # Clear the screen (blank state)
+        with canvas(device) as draw:
+            pass  # Blank the screen
+        time.sleep(interval)
 
 def network(iface):
     addr = psutil.net_if_addrs()[iface]
@@ -117,6 +177,29 @@ def display_info(device):
         else:
             draw.text((0, 39), network(net_name), font=font, fill="white")
 
+def display_cpu_load(device):
+    with canvas(device) as draw:
+        draw.text((0, 5), "CPU", font=font_mid, fill="white")
+        draw.text((0, font_mid_size + 5), "load", font=font_mid, fill="white")
+        loads, loadf =cpu_load()
+        draw.text(((2 * font_mid_size), 0), loads, font=font_big, fill="white")
+        return loadf
+
+def display_temp(device):
+    with canvas(device) as draw:
+        temp, tempf = cpu_temp()
+        draw.text((0, 5), "CPU", font=font_mid, fill="white")
+        draw.text((0, font_mid_size + 5), "temp", font=font_mid, fill="white")
+        draw.text(((2 * font_mid_size), 0), temp, font=font_big, fill="white")
+        return tempf
+
+def display_fan_speed(device):
+    with canvas(device) as draw:
+        draw.text((0, 5), "Fan", font=font_mid, fill="white")
+        draw.text((0, font_mid_size + 5), "rpm", font=font_mid, fill="white")
+        fss, fsi = fan_speed()
+        draw.text(((2 * font_mid_size), 0), fss, font=font_big, fill="white")
+        return fsi
 
 def logo(device, msg):
     img_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -127,22 +210,34 @@ def logo(device, msg):
         draw.bitmap((0, -2), logo, fill="white")
         draw.text((0, 50), msg, font=font_big, fill="white")
 
-
 def sigterm_handler():
     sys.exit(0)
 
-
 signal.signal(signal.SIGTERM, sigterm_handler)
 
+# emergency callables need to return if we're still in an  emergency state
+def emergency_cpu_temp(device):
+    temp = display_temp(device)
+    return temp > max_cpu_temp
+
+def emergency_fan_rpm(device):
+    fan_speed = display_fan_speed(device)
+    return fan_speed <= low_fan_rpm
 
 def main():
     while True:
-        display_info(device)
-        time.sleep(refresh)
+        if show_cpu_temp:
+            emergency_check(device, emergency_cpu_temp)
+            time.sleep(refresh)
+        if show_cpu_load:
+            display_cpu_load(device)
+            time.sleep(refresh)
+        if show_fan_rpm:
+            emergency_check(device, emergency_fan_rpm)
+            time.sleep(refresh)
         if show_logo == "yes":
             logo(device, host_time())
             time.sleep(refresh / 2)
-
 
 if __name__ == "__main__":
     try:
