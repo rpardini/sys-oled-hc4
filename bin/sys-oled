@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
-import configparser
+import glob
 import os
-import psutil
 import signal
 import sys
 import time
-from PIL import Image, ImageFont
+from collections import OrderedDict
+from configparser import ConfigParser
 from datetime import datetime
+
+import psutil
 from luma.core import cmdline, error
 from luma.core.render import canvas
-import glob
+from PIL import Image, ImageFont
 
 # Load presets
 contrast = 255
@@ -26,27 +28,62 @@ low_fan_rpm = -99 # disabled
 show_cpu_temp = 'yes'
 show_cpu_load = 'yes'
 show_fan_rpm = 'yes'
+storage_sections = []
+show_load_average = []
+
+# Get the number of CPU cores
+cpu_count = os.cpu_count()
+
 
 # Load config file
 config_file = '/etc/sys-oled.conf'
+
+def load_sections_with_prefix(config : ConfigParser, prefix, as_ordered_dict=True):
+    """
+    Loads sections from a ConfigParser object that match a given prefix.
+
+    Args:
+        config (configparser.ConfigParser): The existing ConfigParser object.
+        prefix (str): The prefix to match section names (e.g., "disk.").
+        as_ordered_dict (bool): Whether to return results as an OrderedDict (default: True).
+
+    Returns:
+        OrderedDict or List[dict]: Matching sections as an ordered dictionary or a list of dictionaries.
+    """
+    # Collect matching sections
+    result = OrderedDict() if as_ordered_dict else []
+    for section in config.sections():
+        if section.startswith(prefix):
+            # Extract the section name after the prefix (e.g., "disk.disk1" -> "disk1")
+            section_key = section[len(prefix):]
+            section_data = {key: value for key, value in config.items(section)}
+            
+            if as_ordered_dict:
+                result[section_key] = section_data
+            else:
+                result.append(section_data)
+
+    return result
+
+
 if os.path.isfile(config_file):
-    config = configparser.ConfigParser()
+    config = ConfigParser()
     config.read(config_file)
     contrast = int(config.get('main', 'contrast'))
     refresh = float(config.get('main', 'refresh'))
     show_logo = config.get('main', 'show_logo')
-    show_cpu_temp = config.get('main', 'show_cpu_temp') if config.has_option('device', 'show_cpu_temp') else show_cpu_temp
-    show_cpu_load = config.get('main', 'show_cpu_load') if config.has_option('device', 'show_cpu_load') else show_cpu_load
-    show_fan_rpm = config.get('main', 'show_fan_rpm') if config.has_option('device', 'show_fan_rpm') else show_fan_rpm
+    show_cpu_temp = config.get('main', 'show_cpu_temp') if config.has_option('main', 'show_cpu_temp') else show_cpu_temp
+    show_cpu_load = config.get('main', 'show_cpu_load') if config.has_option('main', 'show_cpu_load') else show_cpu_load
+    show_fan_rpm = config.get('main', 'show_fan_rpm') if config.has_option('main', 'show_fan_rpm') else show_fan_rpm
     max_cpu_temp = float(config.get('device', 'max_cpu_temp')) if config.has_option('device','max_cpu_temp') else max_cpu_temp
     low_fan_rpm = float(config.get('device', 'low_fan_rpm')) if config.has_option('device','low_fan_rpm') else low_fan_rpm
     net_name = config.get('device', 'network_name')
-    s1_name = config.get('device', 'storage1_name')
-    s1_path = config.get('device', 'storage1_path')
-    if config.has_option('device', 'storage2_name'):
-        s2_name = config.get('device', 'storage2_name')
-        s2_path = config.get('device', 'storage2_path')
-
+    if config.has_option('main','show_load_average'):
+        show_load_average = config.get('main','show_load_average')
+        show_load_average = [int(item.strip()) for item in show_load_average.split(",")]
+    
+    storage_sections = load_sections_with_prefix(config, "storage.", as_ordered_dict=False)
+        
 # Load font
 font_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                          '../share/sys-oled', 'C&C Red Alert [INET].ttf'))
@@ -104,10 +141,23 @@ def cpu_usage():
     return "ld: %s%% T: %sC up: %s" \
            % (str(load).split('.')[0], str(temp[0].current).split('.')[0], str(uptime).split(',')[0][:-3])
 
+def cpu_load_from_loadavg(index: int):
+    # Read the 1-minute load average from /proc/loadavg
+    with open('/proc/loadavg', 'r') as f:
+        load_avg_1 = float(f.read().split()[index])  # Get the 1-minute load average
+
+    # Calculate the percentage load
+    cpu_load_percentage = (load_avg_1 / cpu_count) * 100.0
+
+    return cpu_load_percentage
+
+def cpu_load_average(lav_index: int):
+    load = float(cpu_load_from_loadavg(lav_index))
+    return ("%.1f%%" if load < 10 else "%.0f%%") % float(load), float(load)
+
 def cpu_load():
     load = psutil.cpu_percent(interval=None)
-    load = (str(load).split('.')[0])
-    return "%s%%" % (str(load).split('.')[0]), float(load)
+    return ("%.1f%%" if load < 10 else "%.0f%%") % load, load
 
 def cpu_temp():
     temp = psutil.sensors_temperatures()['cpu_thermal']
@@ -164,7 +214,6 @@ def host_time():
     now = datetime.now()
     return "" + now.strftime("%Y-%m-%d %H:%M")
 
-
 def display_info(device):
     with canvas(device) as draw:
         draw.text((0, 0), cpu_usage(), font=font, fill="white")
@@ -178,28 +227,45 @@ def display_info(device):
             draw.text((0, 39), network(net_name), font=font, fill="white")
 
 def display_cpu_load(device):
+    loads, loadf = cpu_load()
     with canvas(device) as draw:
         draw.text((0, 5), "CPU", font=font_mid, fill="white")
         draw.text((0, font_mid_size + 5), "load", font=font_mid, fill="white")
-        loads, loadf =cpu_load()
+        draw.text(((2 * font_mid_size), 0), loads, font=font_big, fill="white")
+        return loadf
+
+def display_cpu_load_average(device, lav_index: int):
+    loads, loadf = cpu_load_average(lav_index)
+    with canvas(device) as draw:
+        draw.text((0, 5), "CPU", font=font_mid, fill="white")
+        draw.text((0, font_mid_size + 5), f"av {lav_index}", font=font_mid, fill="white")
         draw.text(((2 * font_mid_size), 0), loads, font=font_big, fill="white")
         return loadf
 
 def display_temp(device):
+    temp, tempf = cpu_temp()
     with canvas(device) as draw:
-        temp, tempf = cpu_temp()
         draw.text((0, 5), "CPU", font=font_mid, fill="white")
         draw.text((0, font_mid_size + 5), "temp", font=font_mid, fill="white")
         draw.text(((2 * font_mid_size), 0), temp, font=font_big, fill="white")
         return tempf
 
 def display_fan_speed(device):
+    fss, fsi = fan_speed()
     with canvas(device) as draw:
         draw.text((0, 5), "Fan", font=font_mid, fill="white")
         draw.text((0, font_mid_size + 5), "rpm", font=font_mid, fill="white")
-        fss, fsi = fan_speed()
         draw.text(((2 * font_mid_size), 0), fss, font=font_big, fill="white")
         return fsi
+
+def display_storage(device, storage: dict):
+    usage = psutil.disk_usage(storage['dir'])
+    txt = "%.0f%%" % usage.percent
+    with canvas(device) as draw:
+        draw.text((0, 5), "Disk", font=font_mid, fill="white")
+        if 'name' in storage:
+            draw.text((0, font_mid_size + 5), storage['name'], font=font_mid, fill="white")
+        draw.text(((2 * font_mid_size), 0), txt, font=font_big, fill="white")
 
 def logo(device, msg):
     img_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -229,12 +295,21 @@ def main():
         if show_cpu_temp:
             emergency_check(device, emergency_cpu_temp)
             time.sleep(refresh)
-        if show_cpu_load:
-            display_cpu_load(device)
-            time.sleep(refresh)
         if show_fan_rpm:
             emergency_check(device, emergency_fan_rpm)
             time.sleep(refresh)
+        if show_cpu_load:
+            display_cpu_load(device)
+            time.sleep(refresh)
+        for lav_index in show_load_average:
+            if int(lav_index) >= 0 and int(lav_index) <= 2:
+                display_cpu_load_average(device, int(lav_index))
+                time.sleep(refresh)
+        for storage in storage_sections:
+            if 'dir' in storage:
+                display_storage(device, storage)
+                time.sleep(refresh)
+
         if show_logo == "yes":
             logo(device, host_time())
             time.sleep(refresh / 2)
