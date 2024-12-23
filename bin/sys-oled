@@ -30,6 +30,7 @@ show_fan_rpm = 'yes'
 show_info = 'yes'
 storage_sections = [{ "name": "sd", "dir": "/" }]
 show_load_average = []
+show_disk_info = 'yes'
 
 # Get the number of CPU cores
 cpu_count = os.cpu_count()
@@ -67,6 +68,7 @@ if os.path.isfile(config_file):
     show_cpu_load = config.get('main', 'show_cpu_load') if config.has_option('main', 'show_cpu_load') else show_cpu_load
     show_fan_rpm = config.get('main', 'show_fan_rpm') if config.has_option('main', 'show_fan_rpm') else show_fan_rpm
     show_info = config.get('main', 'show_info') if config.has_option('main', 'show_info') else show_info
+    show_disk_info = config.get('main', 'show_disk_info') if config.has_option('main', 'show_disk_info') else show_disk_info
     max_cpu_temp = float(config.get('device', 'max_cpu_temp')) if config.has_option('device','max_cpu_temp') else max_cpu_temp
     low_fan_rpm = float(config.get('device', 'low_fan_rpm')) if config.has_option('device','low_fan_rpm') else low_fan_rpm
     net_name = config.get('device', 'network_name') if config.has_option('device','network_name') else net_name
@@ -83,7 +85,7 @@ if os.path.isfile(config_file):
                 raise ValueError("show_load_average config must be a comma separated list of integers between 0 and 2 inclusively.")
     
     storage_sections = _load_sections_with_prefix(config, "storage.", storage_sections)
-        
+
 # ==============================================
 # Font settings.
 # ==============================================
@@ -331,24 +333,25 @@ def emergency_fan_rpm(device):
 
 def main():
     while True:
-        if show_cpu_temp:
+        if show_cpu_temp == 'yes':
             emergency_check(device, emergency_cpu_temp)
             time.sleep(refresh)
-        if show_fan_rpm:
+        if show_fan_rpm == 'yes':
             emergency_check(device, emergency_fan_rpm)
             time.sleep(refresh)
-        if show_cpu_load:
+        if show_cpu_load == 'yes':
             display_cpu_load(device)
             time.sleep(refresh)
         for lav_index in show_load_average:
             if int(lav_index) >= 0 and int(lav_index) <= 2:
                 display_cpu_load_average(device, int(lav_index))
                 time.sleep(refresh)
-        for storage in storage_sections:
-            if 'dir' in storage:
-                display_storage(device, storage)
-                time.sleep(refresh)
-        if show_info:
+        if show_disk_info == 'yes':
+            for storage in storage_sections:
+                if 'dir' in storage:
+                    display_storage(device, storage)
+                    time.sleep(refresh)
+        if show_info == 'yes':
             display_info(device)
             time.sleep(refresh)
         if show_logo == "yes":
