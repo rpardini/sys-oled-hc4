@@ -191,7 +191,7 @@ def cpu_temp():
     Retrieve and format for display the current CPU temp.
     """
     temp = psutil.sensors_temperatures()['cpu_thermal']
-    temp = float(str(temp[0].current).split('.')[0])
+    temp = temp[0].current
     return "%.1f\u00B0" % temp, temp
 
 def fan_speed():
