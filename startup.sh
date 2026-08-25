@@ -28,6 +28,16 @@ if [ $DAEMON_RUNNING -ne 0 ]; then
     sudo service transmission-daemon stop
 fi
 
+# Grab the un-VPNed egress address first, so we can confirm later that it
+# actually changed once the tunnel came up.
+PRE_VPN_IP="$(curl ifconfig.me)"
+if [ "$PRE_VPN_IP" = "" ]; then
+    echo "ERROR: Couldn't determine the pre-VPN external IP address."
+    exit 1
+fi
+
+echo "Pre-VPN external IP address is: $PRE_VPN_IP"
+
 # Sweden
 # nohup $SCRIPTDIR/piavpn.sh -s 33 > /tmp/pia.out 2>&1 &
 nohup $SCRIPTDIR/piavpn.sh -s 73 > /tmp/pia.out 2>&1 &
@@ -63,9 +73,26 @@ echo "VPN external IP address is: $IP"
 # double check
 #DC_IP="$(curl http://jiminger.com/whatsmyip.php)"
 DC_IP="$(curl ifconfig.me)"
+if [ "$DC_IP" = "" ]; then
+    echo "ERROR: Couldn't determine the pre-VPN external IP address."
+    exit 1
+fi
 
-if [ "$DC_IP" != "$IP" ]; then
-    echo "ERROR: The IP address from the VPN output ($IP) doesn't match the IP address when I check ($DC_IP)"
+# Did the egress address actually change? If it didn't, we're not going out
+# over the tunnel at all.
+if [ "$DC_IP" = "$PRE_VPN_IP" ]; then
+    echo "ERROR: The external IP address ($DC_IP) is unchanged from before the VPN came up."
+    echo "       Traffic isn't being routed through the tunnel."
+    exit 1
+fi
+
+# PIA doesn't necessarily NAT us out of the same address we connected to, but
+# it should at least be the same /24.
+IP_SUBNET="$(echo "$IP" | sed -e 's|\.[0-9]*$||1')"
+DC_IP_SUBNET="$(echo "$DC_IP" | sed -e 's|\.[0-9]*$||1')"
+
+if [ "$DC_IP_SUBNET" != "$IP_SUBNET" ]; then
+    echo "ERROR: The IP address from the VPN output ($IP) isn't in the same /24 subnet as the IP address when I check ($DC_IP)"
     exit 1
 fi
 

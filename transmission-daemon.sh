@@ -5,7 +5,7 @@ cd "$MAIN_DIR"
 SCRIPTDIR="$(pwd -P)"
 cd - >/dev/null
 
-DOWNLOADS_DIR=/home/jimfcarroll/torrents
+source "$SCRIPTDIR"/env.sh
 
 if [ "$PORTOPT" != "" ]; then
     echo "Starting transmission-daemon with a port forward: $PORTOPT"
