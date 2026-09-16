@@ -1,4 +1,19 @@
 #!/bin/bash
+# =============================================================================
+# Preamble
+# =============================================================================
+set -eo pipefail
+MAIN_DIR="$(dirname "$BASH_SOURCE")"
+cd "$MAIN_DIR"
+SCRIPTDIR="$(pwd -P)"
+
+cidr_to_mask() {   # "172.16.0.0/16" -> "172.16.0.0 255.255.0.0"
+    local p=${1#*/} m
+    m=$(( 0xFFFFFFFF << (32 - p) & 0xFFFFFFFF ))
+    echo "${1%/*} $((m>>24&255)).$((m>>16&255)).$((m>>8&255)).$((m&255))"
+}
+
+source "$SCRIPTDIR"/env.sh
 
 SCRIPTDIR=`dirname "$BASH_SOURCE"`
 TMPFILE="/tmp/piavpn-tmp"
@@ -139,8 +154,12 @@ echo "*************************************************************************"
 #sudo openvpn --config "$CONFFILE"
 #sudo openvpn --route 172.16.2.0 --route 182.16.3.0 --config "$CONFFILE"
 #sudo openvpn --route 172.16.2.0 255.255.255.0 172.16.1.1 --config "$CONFFILE"
-sudo openvpn --route 172.16.2.0 255.255.255.0 net_gateway \
-             --route 172.16.3.0 255.255.255.0 net_gateway \
+if [ "$ALL_SUBNETS_NETMASK" = "" ]; then
+    echo "You must set ALL_SUBNETS_NETMASK in env.sh. e.g.: export ALL_SUBNETS_NETMASK=172.16.0.0/16"
+    exit 1
+fi
+read -r RT_NET RT_MASK <<< "$(cidr_to_mask "$ALL_SUBNETS_NETMASK")"
+sudo openvpn --route "$RT_NET" "$RT_MASK" net_gateway \
              --route $(dig +short jiminger.com) 255.255.255.255 net_gateway \
              --config "$CONFFILE"
 

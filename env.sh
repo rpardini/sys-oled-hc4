@@ -1,2 +1,4 @@
-
+export ALL_SUBNETS_NETMASK=172.16.0.0/16
+export SUBNET_NETMASK=172.16.2.0/24
+export GATEWAY=172.16.2.1
 export DOWNLOADS_DIR=/data/Downloads

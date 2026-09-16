@@ -1,8 +1,32 @@
 #!/bin/bash
+set -e
 
-sudo pkill transmission
+sgrep() {
+    set +e
+    grep "$@"
+    set -e
+}
 
-sudo pkill openvpn
+spkill() {
+    set +e
+    sudo pkill "$@"
+    set -e
+}
+
+spkill transmission
+
+TMP="$(ps -ef | sgrep transmission | sgrep -v grep)"
+if [ "$TMP" != "" ]; then
+    echo "Waiting for transmission to shut down"
+    while [ "$TMP" != "" ]; do
+        printf "."
+        sleep 1
+        spkill transmission
+        TMP="$(ps -ef | sgrep transmission | sgrep -v grep)"
+    done
+fi
+
+spkill openvpn
 
 sudo iptables-legacy -F
 sudo iptables-legacy -t nat -F
@@ -11,38 +35,27 @@ sudo iptables-legacy -t nat -X
 sudo iptables-legacy -Z
 sudo iptables-legacy -t nat -Z
 
+sudo iptables-legacy -t mangle -F
+sudo iptables-legacy -t mangle -X
+sudo iptables-legacy -t mangle -Z
+
 # -------------------------------------------
 # This undoes the SSH routing.
 # Remove ip rule
-sudo ip rule del fwmark 1 table ssh_table
-
-#   Determin the appropriate interface
-GATEWAY_SUBNET=172.16.2
-#   Resolve the network interface bound to the gateway
-INTERFACE="$(ip -o -4 addr show | grep "$GATEWAY_SUBNET" | awk '{print $2}')"
+sudo ip rule del fwmark 1 table 100 || true
 
 # Remove custom route
-sudo ip route del default via 172.16.2.1 dev $INTERFACE table ssh_table
+sudo ip route flush table 100 2>/dev/null || true
 
 # Remove ssh_table entry from rt_tables
 sudo sed -i '/100 ssh_table/d' /etc/iproute2/rt_tables
 # -------------------------------------------
 
-echo "Grepping process list for transmission:"
-ps -ef | grep transmission | grep -v grep
-
 echo ""
-echo "Grepping process list for openvpn:"
-ps -ef | grep openvpn | grep -v grep
+echo "Sgrepping process list for openvpn:"
+ps -ef | sgrep openvpn | sgrep -v grep
 
 echo ""
 echo "Showing IPTables:"
 sudo iptables-legacy -L
 
-#GATEWAY_SUBNET=172.16.2
-#GATEWAY_IP=$GATEWAY_SUBNET.1
-#MY_SERVER=jiminger.com
-#MYSERVERIP=$(dig +short $MY_SERVER)
-#INTERFACE="$(ip addr | grep "$GATEWAY_SUBNET." | sed -e "s/^.* //1")"
-#
-#sudo ip route del $MYSERVERIP via $GATEWAY_IP dev $INTERFACE

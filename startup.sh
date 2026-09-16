@@ -19,6 +19,8 @@ segrep() {
     set -e
 }
 
+source "$SCRIPTDIR"/env.sh
+
 #Make sure we can sudo for a few minutes
 sudo echo "Hello - there, you're sudoable now"
 
@@ -166,6 +168,11 @@ while [ "$UP" = "keepgoing" ]; do
     fi
 done
 
+if [ "$UP" = "giveup" ]; then
+   echo "Bind timed out!"
+   exit 1
+fi
+
 # -------------------------------------------
 # Allow SSH to work around the VPN for external connections through the port forwarding.
 # Use iptables to mark all outgoing traffic originating from port 22:
@@ -175,9 +182,12 @@ sudo iptables-legacy -t mangle -A OUTPUT -p tcp --sport 22 -j MARK --set-mark 1
 echo "100 ssh_table" | sudo tee -a /etc/iproute2/rt_tables
 
 #   Determin the appropriate interface
-GATEWAY_SUBNET=172.16.2
 #   Resolve the network interface bound to the gateway
-INTERFACE="$(ip -o -4 addr show | grep "$GATEWAY_SUBNET" | awk '{print $2}')"
+if [ "$SUBNET_NETMASK" = "" ]; then
+    echo "You must set SUBNET_NETMASK in env.sh. e.g.: export SUBNET_NETMASK=172.16.2.0/24"
+    exit 1
+fi
+INTERFACE="$(ip -o -4 addr show to $SUBNET_NETMASK | awk '{print $2}')"
 
 if [ "$INTERFACE" = "" ]; then
     echo "ERROR: Couldn't determine the interface bound to $GATEWAY_SUBNET"
@@ -185,7 +195,11 @@ if [ "$INTERFACE" = "" ]; then
 fi
 
 # 2. Add a default route to send traffic through end0:
-sudo ip route add default via 172.16.2.1 dev $INTERFACE table ssh_table
+if [ "$GATEWAY" = "" ]; then
+    echo "You must set GATEWAY in env.sh. e.g.: export GATEWAY=172.16.2.1"
+    exit 1
+fi
+sudo ip route add default via $GATEWAY dev $INTERFACE table ssh_table
 
 # 3. Tell the system to route packets marked by iptables using the custom routing table:
 sudo ip rule add fwmark 1 table ssh_table
