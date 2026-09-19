@@ -110,7 +110,7 @@ font_big = ImageFont.truetype(font_path, font_big_size)
 
 # ==============================================
 # Setup the signal handler
-def sigterm_handler():
+def sigterm_handler(signum, frame):
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, sigterm_handler)
@@ -202,10 +202,30 @@ def cpu_temp():
     temp = temp[0].current
     return "%.1f\u00B0" % temp, temp
 
-_drive_temp_cache = {"t": None, "ts": 0.0}
+_diskstats_prev = {}
+
+def _drive_did_io(dev):
+    """True if dev did filesystem I/O since last check. SMART reads don't count,
+    so an idle drive is never polled and its EPC standby timer never resets."""
+    name = dev.split('/')[-1]
+    try:
+        with open('/proc/diskstats') as f:
+            for line in f:
+                p = line.split()
+                if len(p) >= 10 and p[2] == name:
+                    cur = (p[5], p[9])          # sectors read, sectors written
+                    prev = _diskstats_prev.get(name)
+                    _diskstats_prev[name] = cur
+                    return prev is None or cur != prev
+    except Exception:
+        pass
+    return True                                  # unknown: don't suppress
 
 def _read_drive_temp(dev):
-    """Attr 194 via smartctl; None if standby/unreadable (never wakes a sleeping drive)."""
+    """Attr 194 via smartctl, but only if the drive did I/O since last check.
+    Returns None for idle/asleep/unreadable — never wakes a sleeping drive."""
+    if not _drive_did_io(dev):
+        return None
     try:
         out = subprocess.run(['smartctl', '-n', 'standby', '-A', dev],
                              capture_output=True, text=True, timeout=10).stdout
@@ -218,14 +238,10 @@ def _read_drive_temp(dev):
     return None
 
 def drive_temp():
-    """Hottest array drive, cached 60s. ('zzz', -1) when all asleep/unreadable."""
-    now = time.monotonic()
-    if now - _drive_temp_cache["ts"] > 60.0:
-        temps = [t for t in (_read_drive_temp(d) for d in drive_devices) if t is not None]
-        _drive_temp_cache["t"] = max(temps) if temps else None
-        _drive_temp_cache["ts"] = now
-    t = _drive_temp_cache["t"]
-    return ("zzz", -1.0) if t is None else ("%d\u00B0" % t, float(t))
+    """Hottest array drive doing I/O as (label, tempC). ('zzz', None) when all idle/asleep."""
+    temps = [t for t in (_read_drive_temp(d) for d in drive_devices) if t is not None]
+    t = max(temps) if temps else None
+    return ("zzz", None) if t is None else ("%d\u00B0" % t, t)
 
 def fan_speed():
     """
@@ -373,11 +389,9 @@ def emergency_fan_rpm(device):
     return fan_speed <= low_fan_rpm
 
 def emergency_drive_temp(device):
-    """
-    Display the hottest array drive temp and return True if it exceeds the configured max.
-    The max is 55 degrees C by default. 'zzz' (-1) can never trip.
-    """
-    return display_drive_temp(device) > max_drive_temp
+    """Flash only when a real reading exceeds max. 'zzz' (temp None) never trips."""
+    tempf = display_drive_temp(device)    # uses the return value, no re-poll
+    return tempf is not None and tempf > max_drive_temp
 
 def main():
     while True:

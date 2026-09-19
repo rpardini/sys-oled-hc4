@@ -27,6 +27,22 @@ IFS=',' read -ra devs <<< "$drives"
 for dev in "${devs[@]}"; do
     dev="${dev// /}"
     [ -z "$dev" ] && continue
+
+    # Skip drives idle since the last run: no filesystem I/O => not doing the work
+    # that generates heat, so not the thermal-danger case. Polling an idle-but-spun-up
+    # drive would reset its EPC standby timer and stop it ever sleeping. SMART
+    # passthrough doesn't bump /proc/diskstats; real reads/writes do. A *sleeping*
+    # drive is already handled below by -n standby (reports nothing => zzz).
+    name="${dev##*/}"
+    cur="$(awk -v d="$name" '$3==d{print $6" "$10; exit}' /proc/diskstats)"
+    prev_f="/run/drive-temp-guard.$name"
+    prev="$(cat "$prev_f" 2>/dev/null)"
+    printf '%s\n' "$cur" > "$prev_f"
+    if [ -n "$cur" ] && [ "$cur" = "$prev" ]; then
+        report+="$dev=zzz "
+        continue
+    fi
+
     # -n standby: never wake a sleeping drive; a sleeping drive reports nothing.
     t="$(smartctl -n standby -A "$dev" 2>/dev/null | awk '$1 == 194 { print $10; exit }')"
     if [[ "$t" =~ ^[0-9]+$ ]]; then
