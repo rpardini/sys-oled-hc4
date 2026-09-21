@@ -26,6 +26,12 @@ if [ "$TMP" != "" ]; then
     done
 fi
 
+spkill -f '/run-bind\.sh'      # anchor to the path; SIGTERM not SIGKILL
+sleep 3
+spkill -f '/bind\.sh'          # leading slash prevents matching run-bind.sh
+sleep 1
+spkill -f 'curl.*:19999/bindPort'   # tighter: include the port path
+
 spkill openvpn
 
 sudo iptables-legacy -F
