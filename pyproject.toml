@@ -1,0 +1,45 @@
+[project]
+name = "sys-oled"
+version = "2.0.0"
+description = "System status on SSD1306-class I2C OLED displays"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "GPL-3.0-or-later"
+# Floors match the oldest supported distro packages (Debian Trixie / Ubuntu 25.04).
+# At runtime these come from apt (python3-luma.oled etc.), never from pip.
+dependencies = [
+    "luma.oled>=3.10",
+    "luma.core>=2.4.2",
+    "psutil>=5.9.8",
+    "pillow>=11.1",
+    "smbus2>=0.4.3",
+    "pyyaml>=6.0.2",
+]
+
+[project.scripts]
+sys-oled = "sys_oled.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.14",
+    "resvg-py>=0.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sys_oled"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

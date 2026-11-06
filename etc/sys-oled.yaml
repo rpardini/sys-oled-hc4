@@ -1,0 +1,39 @@
+# sys-oled configuration (YAML).
+# Every key is optional; commented values are the built-in defaults.
+# Precedence (lowest to highest): defaults < /etc/sys-oled.yaml < /etc/sys-oled.d/*.yaml
+#   < env SYS_OLED_<SECTION>_<KEY> < k8s node labels < k8s node annotations < CLI flags.
+# 'sys-oled config' shows the effective configuration and where each value came from.
+
+display:
+  # model: ssd1306                 # ssd1306 | ssd1305 | ssd1309 | ssd1315 | sh1106
+  # i2c_bus: auto                  # auto | bus number N (/dev/i2c-N)
+  # i2c_address: auto              # auto | 0x3c | 0x3d
+  # width: 128                     # pixels
+  # height: 64                     # pixels; 64 or 32
+  # rotate: 2                      # 0-3, quarter turns (luma semantics)
+  # contrast: 255                  # 0-255
+cycle:
+  # refresh: 10                    # seconds per page (the logo page uses logo_seconds)
+  # pages: [status, kubernetes, logo] # status kubernetes logo, big-font load temp fan; inapplicable ones skipped
+  # logo: armbian                  # armbian | none | /path/to/1bit.png
+  # logo_seconds: auto             # seconds on the logo page; auto = refresh/2
+  # screen_off: 0                  # seconds the panel stays off each cycle; 0 = never
+sensors:
+  # network: auto                  # auto (default route) | interface name
+  # thermal: auto                  # auto | sensor name | "re:<regex>"
+  # fan: auto                      # auto (all hwmon fans) | none | "re:<regex>" on hwmon:fanN
+alerts:
+  # temp_max: 0                    # C; above it the panel wakes and flashes a warning; 0 = off
+  # fan_min: 0                     # rpm; any fan below it triggers the warning; 0 = off
+  # flash: true                    # invert the warning page every 0.5s (false: steady)
+storage:
+  # auto: true                     # fill free lines with ranked auto-detected mounts
+  # mounts: []                     # explicit, shown first: [{label: md0, path: /mnt/md0}]
+host:
+  # root: /                        # host / as seen by sys-oled; containers use /host
+  # missing_display: exit          # exit (code 3) | wait (re-probe every 60s)
+kubernetes:
+  # enabled: auto                  # auto (in-cluster service account present) | true | false
+  # prefix: sys-oled               # node label/annotation prefix
+  # refresh: 60                    # max age (s) of k8s page data; fetched only when the page shows
+  # cluster_pods: true             # also count not-running pods cluster-wide
