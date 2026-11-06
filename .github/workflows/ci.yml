@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - run: uv run scripts/build_assets.py --check
+
+  distro:
+    # The runtime only ever uses distro packages: run the suite against each supported distro's versions.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:trixie", "ubuntu:25.04", "ubuntu:26.04"]
+    container: ${{ matrix.image }}
+    steps:
+      - run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3 python3-luma.oled python3-psutil python3-pil \
+            python3-smbus2 python3-yaml python3-pytest
+      - uses: actions/checkout@v7
+      - run: python3 -m pytest -q -p no:cacheprovider tests
+
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: shellcheck install.sh scripts/test-installer.sh
+
+  installer:
+    # fresh install, pre-2.0 migration and uninstall/purge in each supported distro (no systemd/I2C there)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/test-installer.sh
+
+  chart:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.1
+      - run: helm lint charts/sys-oled
+      - name: kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          helm template t charts/sys-oled | ./kubeconform -strict -summary -
+          helm template t charts/sys-oled --set devicePlugin.resource=squat.ai/i2c --set config.cycle.screen_off=60 \
+            --set kubernetes.enabled=false | ./kubeconform -strict -summary -

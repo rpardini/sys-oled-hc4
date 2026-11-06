@@ -1,0 +1,18 @@
+sys-oled runs as a DaemonSet on nodes labeled {{ .Values.nodeConfig.prefix }}/enabled=true.
+
+Enable a node that has an OLED display:
+  kubectl label node <node> {{ .Values.nodeConfig.prefix }}/enabled=true
+
+Per-node settings (applied live, no pod restart):
+  # simple values as labels
+  kubectl label node <node> {{ .Values.nodeConfig.prefix }}/display.rotate=0 --overwrite
+  kubectl label node <node> {{ .Values.nodeConfig.prefix }}/cycle.screen_off=300 --overwrite
+  # anything (regexes, lists) as annotations, values are YAML
+  kubectl annotate node <node> '{{ .Values.nodeConfig.prefix }}/sensors.thermal=re:^bigcore' --overwrite
+  kubectl annotate node <node> '{{ .Values.nodeConfig.prefix }}/storage.mounts=[{label: md0, path: /mnt/md0}]' --overwrite
+
+Effective configuration and where each value came from:
+  kubectl -n {{ .Release.Namespace }} exec ds/{{ include "sys-oled.fullname" . }} -- /opt/sys-oled/bin/sys-oled config
+
+Logs (display detection, sensor choice, config changes):
+  kubectl -n {{ .Release.Namespace }} logs ds/{{ include "sys-oled.fullname" . }}

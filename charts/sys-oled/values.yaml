@@ -1,0 +1,66 @@
+image:
+  repository: ghcr.io/rpardini/sys-oled-hc4
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nodeConfig:
+  # Nodes opt in with the label <prefix>/enabled=true; per-node settings come from
+  # <prefix>/<section>.<key> labels (simple values) and annotations (any YAML value).
+  prefix: sys-oled
+
+# Defaults to {<prefix>/enabled: "true"} when empty.
+nodeSelector: {}
+
+affinity: {}
+
+tolerations:
+  # SBC clusters often have the display on a control-plane node.
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+# Cluster-wide defaults, same schema as /etc/sys-oled.yaml (see 'sys-oled config --defaults').
+# Node labels/annotations override these per node.
+config: {}
+#  cycle:
+#    screen_off: 60
+#  kubernetes:
+#    cluster_pods: false
+
+kubernetes:
+  # Show the in-cluster status page (needs the RBAC below).
+  enabled: true
+
+# Extra env vars for the container.
+env: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  # Read-only: nodes get/list/watch (own-node watch for config), pods list (per-node and cluster counts).
+  create: true
+
+# Without a device plugin, vanilla Kubernetes can only grant /dev/i2c-* access via privileged.
+privileged: true
+
+devicePlugin:
+  # e.g. "squat.ai/i2c" from generic-device-plugin; when set, privileged is turned off.
+  resource: ""
+
+priorityClassName: ""
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 40Mi
+  limits:
+    memory: 128Mi
+
+podAnnotations: {}
+podLabels: {}

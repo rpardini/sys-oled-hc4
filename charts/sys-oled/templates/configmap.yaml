@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sys-oled.fullname" . }}
+  labels:
+    {{- include "sys-oled.labels" . | nindent 4 }}
+data:
+  # Mounted as /etc/sys-oled.d/10-helm.yaml: cluster-wide defaults; node labels/annotations override per node.
+  10-helm.yaml: |
+    {{- if .Values.config }}
+    {{- toYaml .Values.config | nindent 4 }}
+    {{- else }}
+    # no cluster-wide overrides (values.config is empty)
+    {{- end }}

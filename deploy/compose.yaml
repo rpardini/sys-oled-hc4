@@ -1,0 +1,20 @@
+# docker compose deployment. Don't also run the systemd service: both would drive the same display.
+# The host needs the i2c-dev module loaded (echo i2c-dev > /etc/modules-load.d/i2c-dev.conf).
+services:
+  sys-oled:
+    image: ghcr.io/rpardini/sys-oled-hc4:latest
+    restart: unless-stopped
+    init: true
+    network_mode: host                 # default-route iface + IP, netlink change events
+    pid: host                          # /proc/1/mountinfo = host mounts
+    uts: host                          # host's hostname on the logo page
+    read_only: true
+    volumes:
+      - /dev:/dev                      # i2c nodes; keeps runtime bus auto-detection
+      - /:/host:ro,rslave              # statfs of host mounts
+      # - ./sys-oled.yaml:/etc/sys-oled.yaml:ro
+    device_cgroup_rules:
+      - "c 89:* rw"                    # i2c-dev major only, no --privileged
+    # environment:
+    #   SYS_OLED_DISPLAY_ROTATE: "0"
+    #   SYS_OLED_CYCLE_SCREEN_OFF: "60"

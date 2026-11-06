@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "sys-oled.fullname" . }}
+  labels:
+    {{- include "sys-oled.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "sys-oled.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sys-oled.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "sys-oled.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.kubernetes.enabled }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Host network: default-route iface/IP and netlink events. Host PID: /proc/1/mountinfo is the host's.
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      nodeSelector:
+        {{- include "sys-oled.nodeSelector" . | nindent 8 }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: sys-oled
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["run"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: SYS_OLED_HOST_ROOT
+              value: /host
+            - name: SYS_OLED_HOST_MISSING_DISPLAY
+              value: wait
+            - name: SYS_OLED_KUBERNETES_PREFIX
+              value: {{ .Values.nodeConfig.prefix | quote }}
+            - name: SYS_OLED_KUBERNETES_ENABLED
+              value: {{ .Values.kubernetes.enabled | quote }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            privileged: {{ and .Values.privileged (not .Values.devicePlugin.resource) }}
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+          resources:
+            {{- $res := deepCopy .Values.resources }}
+            {{- if .Values.devicePlugin.resource }}
+            {{- $_ := set $res "limits" (merge (dict .Values.devicePlugin.resource "1") ($res.limits | default dict)) }}
+            {{- end }}
+            {{- toYaml $res | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sys-oled.d
+              readOnly: true
+            - name: dev
+              mountPath: /dev
+            - name: host
+              mountPath: /host
+              readOnly: true
+              mountPropagation: HostToContainer
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "sys-oled.fullname" . }}
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: host
+          hostPath:
+            path: /
+            type: Directory

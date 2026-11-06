@@ -1,0 +1,18 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "sys-oled.fullname" . }}
+  labels:
+    {{- include "sys-oled.labels" . | nindent 4 }}
+rules:
+  # Own node: config from labels/annotations (watched, field-selected to metadata.name) and status.
+  # Node list: ready/total count on the k8s page.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  # Pods on this node span namespaces, so the list is cluster-scoped (queried with a spec.nodeName fieldSelector).
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+{{- end }}

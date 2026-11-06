@@ -1,0 +1,12 @@
+apiVersion: v2
+name: sys-oled
+description: System status on SSD1306-class I2C OLED displays, one pod per labeled node, configured via node labels/annotations.
+type: application
+# version/appVersion are overwritten by CI (tags: X.Y.Z; master: 0.0.0-main.N+sha / sha-<sha>).
+version: 0.0.0
+appVersion: "latest"
+home: https://github.com/rpardini/sys-oled-hc4
+sources:
+  - https://github.com/rpardini/sys-oled-hc4
+icon: https://raw.githubusercontent.com/rpardini/sys-oled-hc4/master/capture/logo.png
+keywords: [oled, ssd1306, i2c, armbian, sbc, status]

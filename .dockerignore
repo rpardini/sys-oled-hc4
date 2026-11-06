@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.idea
+.DS_Store
+**/__pycache__
+.pytest_cache
+.ruff_cache
+tests
+capture
+assets-src
+charts
+deploy
+scripts
