@@ -1,8 +1,20 @@
 [Unit]
 Description=OLED Display
+After=systemd-modules-load.service
 
 [Service]
-ExecStart=/usr/bin/python3 /usr/local/bin/sys-oled --display ssd1306 --i2c-port 0 --rotate 2
+# All settings live in /etc/sys-oled.yaml and /etc/sys-oled.d/*.yaml; do not add options here.
+ExecStart=/usr/local/bin/sys-oled
+Restart=on-failure
+RestartSec=5
+# Exit code 3: no display found; retrying won't help until hardware/config changes.
+RestartPreventExitStatus=3
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+DevicePolicy=closed
+DeviceAllow=char-i2c rw
 
 [Install]
 WantedBy=multi-user.target
