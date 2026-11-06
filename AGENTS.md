@@ -77,3 +77,15 @@ To test against the real distro packages, as CI does:
 - `astral-sh/setup-uv` publishes no floating major tags, so pin a full version. The other actions use major tags.
 - Image tags: branch, `sha-<7>`, semver and `latest`. Master pushes produce dev charts `0.0.0-main.<run>+<sha>` (install
   with `--devel`); `vX.Y.Z` tags produce releases.
+
+## Releasing
+
+1. Bump the version in **both** `pyproject.toml` and `src/sys_oled/__init__.py`, then run `uv lock`.
+   `tests/test_screen.py::test_versions_in_sync` checks they match.
+2. Commit, then make a signed tag: `git tag -s vX.Y.Z -m "sys-oled X.Y.Z" -m "- bullets"` (gpg has no passphrase).
+   The user pushes.
+3. The tag push makes `container.yml` publish image `X.Y.Z`/`X.Y` and chart `X.Y.Z`. Check them with
+   `docker buildx imagetools inspect ghcr.io/rpardini/sys-oled-hc4:X.Y.Z` and
+   `helm show chart oci://ghcr.io/rpardini/sys-oled-hc4/charts/sys-oled --version X.Y.Z`.
+4. `gh release create vX.Y.Z --verify-tag --latest --notes-file ...`. Call out breaking changes, e.g. dropped distros.
+5. Never rewrite history at or before a released tag. Follow-ups go in new commits.

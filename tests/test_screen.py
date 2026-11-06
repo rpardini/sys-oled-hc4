@@ -38,3 +38,13 @@ def test_pages_render_at_both_heights():
 def test_logo_none():
     r = Renderer((128, 64), "none")
     assert r.logo is None
+
+
+def test_versions_in_sync():
+    import tomllib
+    from pathlib import Path
+
+    import sys_oled
+
+    pyproject = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
+    assert pyproject["project"]["version"] == sys_oled.__version__
