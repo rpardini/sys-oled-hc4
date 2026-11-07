@@ -18,7 +18,7 @@ class FakeSMBus:
     def __exit__(self, *a):
         return False
 
-    def write_quick(self, addr):
+    def read_byte(self, addr):
         r = self.devices.get((self.bus, addr), errno.ENXIO)
         if r != "ack":
             raise OSError(r, "fake")

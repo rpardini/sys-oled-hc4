@@ -142,8 +142,9 @@ Everything is detected once at startup. After that, the per-cycle work is a few 
 one ioctl and a `statfs` per shown mount. Detection only reruns when something fails, or when the kernel signals a
 mount-table or network change (mountinfo `POLLPRI`, netlink route events).
 
-- **Display:** probes every `/dev/i2c-N` at 0x3c then 0x3d, the same quick-write probe `i2cdetect` uses. It skips
-  DP-AUX/DDC/HDMI adapters and addresses already claimed by a kernel driver. No `i2c-tools` needed.
+- **Display:** probes every `/dev/i2c-N` at 0x3c then 0x3d with a read-byte probe, like `i2cdetect -r`
+  (works on adapters without quick-write, e.g. MediaTek). It skips DP-AUX/DDC/HDMI adapters and addresses already
+  claimed by a kernel driver. No `i2c-tools` needed.
 - **Temperature:** scans thermal zones and hwmon, then picks by tier:
   1. SoC/package sensors (`soc-thermal`, `x86_pkg_temp`, coretemp "Package id", k10temp Tctl);
   2. CPU sensors, showing the hottest (`cpu-thermal`, per-core/cluster zones on Genio, `bigcore*`/`littlecore` on RK3588);

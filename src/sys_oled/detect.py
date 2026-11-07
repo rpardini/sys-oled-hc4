@@ -40,12 +40,13 @@ def list_adapters(sysfs: Path = Path("/sys")) -> list[tuple[int, str]]:
 
 
 def probe(bus: int, address: int, smbus_factory=None) -> str:
-    """SMBus quick-write probe, same as i2cdetect does for 0x3c. Returns ack|nack|busy|error:<msg>."""
+    """SMBus read-byte probe, as `i2cdetect -r` does; unlike quick-write it works on adapters that reject zero-length
+    transfers (e.g. MediaTek). Returns ack|nack|busy|error:<msg>."""
     if smbus_factory is None:
         from smbus2 import SMBus as smbus_factory
     try:
         with smbus_factory(bus) as sm:
-            sm.write_quick(address)
+            sm.read_byte(address)
         return "ack"
     except OSError as e:
         if e.errno == errno.EBUSY:
